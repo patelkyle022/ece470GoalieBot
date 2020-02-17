@@ -28,7 +28,7 @@ targetPos1 = [90*PI/180, 90*PI/180, -90*PI/180, 90*PI/180, 90*PI/180, 90*PI/180]
 sim.simxStartSimulation(clientID, sim.simx_opmode_oneshot)
 time.sleep(1)
 for i in range(0,6):
-    sim.simxSetJointTargetPosition(clientID, jointHandles[i], targetPos1[i], sim.simx_opmode_streaming)
+    sim.simxSetJointTargetPosition(clientID, jointHandles[i], targetPos1[i], sim.simx_opmode_oneshot_wait)
 
 sim.simxStopSimulation(clientID, sim.simx_opmode_oneshot)
 sim.simxFinish(clientID)
