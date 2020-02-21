@@ -2,6 +2,7 @@ import sim
 import sys
 import math
 import time
+import move_helper
 
 global PI
 PI = math.pi
@@ -18,10 +19,11 @@ else:
 jointHandles = [-1, -1, -1, -1, -1, -1]
 
 #Get joint handles
-for i in range(0,6):
-    jointHandles[i] = sim.simxGetObjectHandle(clientID, 'UR3_joint' + str(i + 1), sim.simx_opmode_blocking) [1]
+#for i in range(0,6):
+#    jointHandles[i] = sim.simxGetObjectHandle(clientID, 'UR3_joint' + str(i + 1), sim.simx_opmode_blocking) [1]
 
-print(jointHandles)
+
+print(move_helper.getJointHandles(clientID, jointHandles))
 
 #Get Proximity Sensor Handle
 errorCode, sensorHandle = sim.simxGetObjectHandle(clientID, 'Ball_Sensor', sim.simx_opmode_blocking)
@@ -44,8 +46,9 @@ time.sleep(1)
 
 
 #Send command for moving robot.
-for i in range(0,6):
-    sim.simxSetJointTargetPosition(clientID, jointHandles[i], targetPos1[i], sim.simx_opmode_oneshot_wait)
+move_helper.setTargetPosition(clientID, jointHandles, targetPos1)
+#for i in range(0,6):
+#    sim.simxSetJointTargetPosition(clientID, jointHandles[i], targetPos1[i], sim.simx_opmode_oneshot_wait)
 
 time.sleep(1)
 
