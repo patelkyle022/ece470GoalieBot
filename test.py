@@ -169,7 +169,6 @@ def main():
 
     #the position and orientation of the UR3 base frame wrt world frame (T_wb)
     T_base_in_world = np.array([[-1, 0, 0, -1.4001], [0, -1, 0, -0.000086], [0, 0, 1, 0.043], [0, 0, 0, 1]])
-    print(T_base_in_world.shape)
     #T_bw
     T_world_in_base = np.linalg.inv(T_base_in_world)
 
@@ -205,9 +204,7 @@ def main():
                 detectedPoint2 = detectionData[2]
                 found2 = True
             count += 1
-    
 
-    
     #point_in_sensorX - homogeneous coords of detectedPoints in the frame of the proximity sensor
     point_in_sensor1 = np.array([[detectedPoint1[0]], [detectedPoint1[1]], [detectedPoint1[2]], [1]])
     point_in_sensor2 = np.array([[detectedPoint2[0]], [detectedPoint2[1]], [detectedPoint2[2]], [1]])
@@ -217,9 +214,6 @@ def main():
     point1_ball_in_base = np.matmul(T_sensor_in_base, point_in_sensor1)[:3]
     point2_ball_in_base = np.matmul(T_sensor_in_base, point_in_sensor2)[:3]
     
-    print('point1_ball_in_base: ' + str(point1_ball_in_base))
-    print('point2_ball_in_base: ' + str(point2_ball_in_base))
-
     #the predicted direction the ball is moving in, based off of predicted points 1 and 2
     vector = (1.0*point2_ball_in_base - point1_ball_in_base)
 
@@ -235,11 +229,11 @@ def main():
     final_x = end_effector_wrt_base[0]
     final_y = point2_ball_in_base[1] + (t * vector[1])
     final_z = point2_ball_in_base[2] + (t * vector[2])
-
+    
     #the predicted point of the ball
-    predicted_point = np.array([[final_x, final_y, final_z]]).T
+    predicted_point = np.array([[final_x], [final_y[0]], [final_z[0]]])
     print("Predicted Point: " + str(predicted_point))
-    print("End Point Ball in Base" + str(end_pt_ball_in_base))
+    print("End Point Ball in Base: " + str(end_pt_ball_in_base))
     #compare prediction to actual end pt of ball
     difference = predicted_point - end_pt_ball_in_base
     print("Difference: " + str(difference))
@@ -248,17 +242,13 @@ def main():
     
     #final position and orientation of end-effector based on predicted ball location
     #orientation doesn't need to change, just the position to block the ball
-    final_T = M_endeff_in_base
-    final_T[:3,3:] = np.array([[final_x], [final_y], [final_z]])
-    print(final_T)
-
+    final_T = np.copy(M_endeff_in_base)
+    final_T[:3,3:] = predicted_point
     #our initial guess of what the UR3 joint angles should be to get to finalT
     initialGuess = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-
     #use inverse kinematics to find joint angles that will get us to finalT
-    thetas1, success = mr.IKinSpace(S, M_endeff_in_base, final_T, initialGuess, 0.01, 0.01)
+    (thetas1, success) = mr.IKinSpace(S, M_endeff_in_base, final_T, initialGuess, 0.8, 0.015)
     print('thetas1: ' + str(thetas1))
-
     #set UR3 joints to angles to block ball!
     for i in range(6):
         sim.simxSetJointTargetPosition(clientID, jointHandles[i], thetas1[i], sim.simx_opmode_oneshot_wait)
