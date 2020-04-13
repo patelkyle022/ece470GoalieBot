@@ -14,7 +14,7 @@ As of Update 3 (April 12th), we have implemented random linear motion of our bal
 
 We are also able to predict where in the vertical plane of the goal line the ball will end up to a reasonable degree of accuracy (typically less than 0.1m in error) in the base frame. This calculation requires us to transform the detection points for the ball from the world frame to our robot's base frame, and find the vector that crosses through the goal line to determine the desired point the robot's end-effector will travel to.
 
-Our implementation of Inverse Kinematics-based motion planning does not work as intended in that the output joint angles for our desired end-effector configuration are unreasonably large. For the final update, we will work to figure out why this is the case.
+Our implementation of Inverse Kinematics-based motion planning does not work as intended in that the output joint angles for our desired end-effector configuration are unreasonably large. For the final update, we will work to figure out why this is the case and have our robot collide with the ball with the end-effector retaining its orientation from the home position.
 
 
 
