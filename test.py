@@ -180,10 +180,6 @@ def main():
     end_pt_ball_in_base = np.matmul(T_world_in_base, end_pt_homogenous_coords)[:3]
 
     
-    #T_sd - desired position and orientation of end effector in base (spatial) frame
-    T_sd = M_endeff_in_base
-    T_sd[:3, 3:] = np.array([end_pt_ball_in_base])
-    
 
     #Sensor readings of ball positions
     detectedPoint1 = None
@@ -242,12 +238,13 @@ def main():
     
     #final position and orientation of end-effector based on predicted ball location
     #orientation doesn't need to change, just the position to block the ball
-    final_T = np.copy(M_endeff_in_base)
-    final_T[:3,3:] = predicted_point
+    final_T = np.zeros((4, 4))
+    final_T[:3, :3] = M_endeff_in_base[:3, :3]
+    final_T[:3, 3:] = predicted_point
     #our initial guess of what the UR3 joint angles should be to get to finalT
     initialGuess = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     #use inverse kinematics to find joint angles that will get us to finalT
-    (thetas1, success) = mr.IKinSpace(S, M_endeff_in_base, final_T, initialGuess, 0.8, 0.015)
+    (thetas1, success) = mr.IKinSpace(S, M_endeff_in_base, final_T, initialGuess, 0.8, 0.015) #still tweaking these values
     print('thetas1: ' + str(thetas1))
     #set UR3 joints to angles to block ball!
     for i in range(6):
