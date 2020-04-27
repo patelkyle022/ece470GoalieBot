@@ -1,28 +1,18 @@
 import sim
 import sys
-import math
-import time
-import timeit
 import numpy as np
-from scipy.linalg import expm
 import modern_robotics as mr
+import utils
+import threading
+import time 
+import simConst as sc
 
 global PI
-PI = math.pi
-
+PI = np.pi
 #just a 4x4 identity matrix
 global identity 
 identity = np.eye(4)
-
 #the w's for the joints of the UR3 (all are revolute)
-global w
-w = np.zeros((6,3))
-w[0] = np.array([0, 0, 1]).T
-w[1] = np.array([-1, 0, 0]).T
-w[2] = np.array([-1, 0, 0]).T
-w[3] = np.array([-1, 0, 0]).T
-w[4] = np.array([0, 0, 1]).T
-w[5] = np.array([-1, 0, 0]).T
 
 #global q for the positions of each joint
 global q
@@ -30,8 +20,8 @@ q = np.zeros((6,3))
 
 #v's for each joint
 global v
-v = np.zeros((6,3))
-
+#v = np.zeros((6,3))
+v = np.zeros((3,3))
 base_handle = 0
 end_effector_handle = 0
 end_effector_wrt_base = [0,0,0]
@@ -41,70 +31,68 @@ def skew(x):
     return np.array([[0, -x[2], x[1]], [x[2], 0, -x[0]], [-x[1], x[0], 0]])
 
 #get forward kinematics of UR3 with an input joint angles
-def getT(clientID, jointHandles, thetas):
-    global w
-    global v
-    global identity
 
-    targetAngles = [0,0,0,0,0,0]
-    for i in range(6):
-        targetAngles[i] = thetas[i]
+#generate_path gives a random direction towards the goal with velocity 2 m/s
+def generate_path():
+    #defining random endpoint constraints
+    ball_start_pos = np.array([2.350, 0, 0.05])
+    theta =  np.pi * np.random.uniform(1 / 6, 5 / 6)
+    r = 0.54 * np.random.random_sample()
+    endY = r * np.cos(theta)
+    endZ = 0.152 + r * np.sin(theta)
+    path_length = np.random.randint(400, 500)
+    #the end position of the ball, random each time!
+    endX = -1.4001 #position of base in world frame
+    #in world frame coords, the path that the ball takes towards the goal
+    x_path = np.linspace(ball_start_pos[0], endX, path_length)
+    y_path = np.linspace(ball_start_pos[1], endY, path_length)
+    z_path = np.linspace(ball_start_pos[2], endZ, path_length)
+    path = np.vstack((x_path, y_path, z_path)).T
+    return path
 
-
-    wb = np.zeros((6,3,3))
-    for i in range(6):
-        wb[i] = skew(w[i])
-
-    Sb = np.zeros((6,4,4))
-    for i in range(6):
-        Sb[i,:3,:3] = wb[i]
-        Sb[i,:3,3] = np.array(v[i]).T
-        Sb[i] *= targetAngles[i]
-
-    e_Sb = np.zeros((6,4,4))
-    for i in range(6):
-        e_Sb[i] = expm(Sb[i])
-
-    T = np.eye(4)
-    for i in range(6):
-        T = np.matmul(T, e_Sb[i])
-
-    T = np.matmul(T, identity)
-
-    return T 
 
 def main():
     global q
-    global w
     global v
     global base_handle
     sim.simxFinish(-1)
+    
     clientID=sim.simxStart('127.0.0.1',19999,True,True,5000,5)
     if clientID!=-1:
         print ('Connected to remote API server')
     else:
         print ('Failed connecting to remote API server')
         sys.exit('Could not connect to remote API server')
-        
+    sim.simxSynchronous(clientID, 1) #synchronous operation necessary for 
     sim.simxStartSimulation(clientID, sim.simx_opmode_oneshot)
-
+    
+    
     jointHandles = [-1, -1, -1, -1, -1, -1]
     #Get joint handles
     for i in range(0,6):
         jointHandles[i] = sim.simxGetObjectHandle(clientID, 'UR3_joint' + str(i + 1), sim.simx_opmode_blocking) [1]
 
     #set q values
-    for i in range(6):
+    #for i in range(6):
+        #q[i] = np.array(sim.simxGetObjectPosition(clientID, jointHandles[i], base_handle, sim.simx_opmode_blocking) [1])
+
+    #ALT: get q values of joints 2, 3, 4
+    for i in range(1, 4):
         q[i] = np.array(sim.simxGetObjectPosition(clientID, jointHandles[i], base_handle, sim.simx_opmode_blocking) [1])
-
+    
     #set v values
-    for i in range(6):
-        v[i] = np.cross(-w[i], q[i])
+    #for i in range(6):
+        #v[i] = np.cross(-utils.w[i], q[i])
 
+    #ALT: get v values of joints 2, 3, 4
+    for i in range(1, 4):
+        v[i - 1] = np.cross(-utils.w[i], q[i])
+    
     #calculate screw axes
-    S = np.zeros((6,6))
-    for i in range(6):
-        S[i,:3] = w[i]
+    #S = np.zeros((6,6))
+    S = np.zeros((3,6))
+    for i in range(3):
+        S[i,:3] = utils.w[i+1]
         S[i,3:] = v[i] 
 
     S = S.T  #actual screw axes is transpose of this
@@ -113,19 +101,7 @@ def main():
     global identity
 
     
-    #defining random endpoint constraints
-    minY = -0.54; maxY = 0.54
-    minZ = 0.30
-    maxZ = 0.60
-    path_length = np.random.randint(700, 800)
 
-    #the end position of the ball, random each time!
-    endX = -1.2056 #position of base in world frame
-    endY = np.random.uniform(minY, maxY)
-    endZ = np.random.uniform(minZ, maxZ)
-    print('endY: ' + str(endY))
-    print('endZ: ' + str(endZ))
-    
 
     #handle of UR3
     base_handle = sim.simxGetObjectHandle(clientID, "UR3", sim.simx_opmode_blocking)[1]
@@ -139,100 +115,81 @@ def main():
     #handle for the ball
     ball_handle = sim.simxGetObjectHandle(clientID, 'Ball', sim.simx_opmode_blocking)[1]
 
-    #handle for collisions
-    collision_handle = sim.simxGetCollisionHandle(clientID, 'Collision', sim.simx_opmode_blocking)[1]
-
     #handle for ball sensor/proximity sensor
     sensorHandle = sim.simxGetObjectHandle(clientID, 'Ball_Sensor', sim.simx_opmode_blocking)[1]
 
-    #start position of ball in world frame
-    ball_start_pos = np.array([2.350, 0, 0.05])
-
-    #in world frame coords, the path that the ball takes towards the goal
-    x_path = np.linspace(ball_start_pos[0], endX, path_length)
-    y_path = np.linspace(ball_start_pos[1], endY, path_length)
-    z_path = np.linspace(ball_start_pos[2], endZ, path_length)
-    path = np.vstack((x_path, y_path, z_path)).T
     
     #home position of UR3 end-effector in coords of UR3 base frame
-    M_endeff_in_base = np.array([[-1,   0,      0, end_effector_wrt_base[0]], 
-         [0,    -1,     0, end_effector_wrt_base[1]], 
-         [0,    0,      1, end_effector_wrt_base[2]], 
+    M_endeff_in_base = np.array( \
+        [[-1,   0,      0, end_effector_wrt_base[0]], \
+         [0,    -1,     0, end_effector_wrt_base[1]], \
+         [0,    0,      1, end_effector_wrt_base[2]], \
          [0,    0,      0,                        1]])
+
     #position and orientation of proximity sensore wrt UR3 base frame
-    T_sensor_in_base = np.array([[0, 0, -1, end_effector_wrt_base[0]], [0, -1, 0,  end_effector_wrt_base[1]] \
-    , [-1, 0, 0,  end_effector_wrt_base[2]], [0, 0, 0, 1]])
+    T_sensor_in_base = np.array( \
+        [[0, 0, -1, end_effector_wrt_base[0]], 
+        [0, -1, 0,  end_effector_wrt_base[1]], \
+        [-1, 0, 0,  end_effector_wrt_base[2]], 
+        [0, 0, 0, 1]])
 
-    
     #the actual end point of the ball based on path in the world frame
-    end_pt = path[path_length - 1]
-
+    
+    
+    path = generate_path()
+    end_pt = path[path.shape[0] - 1]
+    detectedPoints = np.zeros((2, 3))
     #the position and orientation of the UR3 base frame wrt world frame (T_wb)
     T_base_in_world = np.array([[-1, 0, 0, -1.4001], [0, -1, 0, -0.000086], [0, 0, 1, 0.043], [0, 0, 0, 1]])
     #T_bw
     T_world_in_base = np.linalg.inv(T_base_in_world)
-
     #end pt coords in homog form
     end_pt_homogenous_coords = np.array([[end_pt[0], end_pt[1], end_pt[2], 1]]).T
-
     #T_bw * p_w = p_b (4,4) * (4, 1) -> (4, 1), left out final element -> (3, 1)
     #the actual endpt of the ball in the base frame
     end_pt_ball_in_base = np.matmul(T_world_in_base, end_pt_homogenous_coords)[:3]
 
-    
 
-    #Sensor readings of ball positions
-    detectedPoint1 = None
-    detectedPoint2 = None
-    found1 = False
-    found2 = False
-    count = 0
-    for i in range(path.shape[0]):
-        sim.simxSetObjectPosition(clientID, ball_handle, -1, path[i], sim.simx_opmode_oneshot_wait)
-        detectionData = sim.simxReadProximitySensor(clientID, sensorHandle, sim.simx_opmode_streaming)
-        #get a first detected position
-        if (detectionData[1] and not found1):
-            detectedPoint1 = detectionData[2]
-            found1 = True
-        #wait a sufficient amount of time to get a second position, so that a "velocity"/slope of movement can be found
-        if (detectionData[1] and found1 and not found2):
-            if (count > 50):
-                detectedPoint2 = detectionData[2]
-                found2 = True
-            count += 1
 
+    detection_thread = threading.Thread(target=utils.calc_ball_position, args=(clientID, sensorHandle, path, detectedPoints))
+    motion_thread = threading.Thread(target=utils.move_ball, args=(clientID, ball_handle, path))
+    motion_thread.start()
+    detection_thread.start()
+    detection_thread.join()
     #point_in_sensorX - homogeneous coords of detectedPoints in the frame of the proximity sensor
-    point_in_sensor1 = np.array([[detectedPoint1[0]], [detectedPoint1[1]], [detectedPoint1[2]], [1]])
-    point_in_sensor2 = np.array([[detectedPoint2[0]], [detectedPoint2[1]], [detectedPoint2[2]], [1]])
-
-    #the detected points, in the frame of the UR3 base
+    point_in_sensor1 = np.array([[detectedPoints[0][0]], [detectedPoints[0][1]], [detectedPoints[0][2]], [1]])
+    point_in_sensor2 = np.array([[detectedPoints[1][0]], [detectedPoints[1][1]], [detectedPoints[1][2]], [1]])
+    
     #T_bs * p_s = p_b
     point1_ball_in_base = np.matmul(T_sensor_in_base, point_in_sensor1)[:3]
-    point2_ball_in_base = np.matmul(T_sensor_in_base, point_in_sensor2)[:3]
-    
-    #the predicted direction the ball is moving in, based off of predicted points 1 and 2
+    point2_ball_in_base = np.matmul(T_sensor_in_base, point_in_sensor2)[:3]    
     vector = (1.0*point2_ball_in_base - point1_ball_in_base)
 
     #convert to unit vector
     vector /= np.linalg.norm(vector)
-
+    t = (end_effector_wrt_base[0] - point2_ball_in_base[0]) / vector[0]
+    final_x = end_effector_wrt_base[0]
+    final_y = point2_ball_in_base[1] + (t * vector[1])
+    final_z = point2_ball_in_base[2] + (t * vector[2])
+    predicted_point = np.array([[final_x], [final_y[0]], [final_z[0]]])
+    difference = predicted_point - end_pt_ball_in_base
+    print("Difference: " + str(difference))
+     
+    #the predicted direction the ball is moving in, based off of predicted points 1 and 2
+    
     #if the difference between detected points is too small
     if (vector[0] == 0):
         vector[0] += 0.000000001
 
     #find the estimated position of the ball when it is in the yz plane of the UR3
-    t = (end_effector_wrt_base[0] - point2_ball_in_base[0]) / vector[0]
-    final_x = end_effector_wrt_base[0]
-    final_y = point2_ball_in_base[1] + (t * vector[1])
-    final_z = point2_ball_in_base[2] + (t * vector[2])
+
     
     #the predicted point of the ball
-    predicted_point = np.array([[final_x], [final_y[0]], [final_z[0]]])
+    
     print("Predicted Point: " + str(predicted_point))
     print("End Point Ball in Base: " + str(end_pt_ball_in_base))
     #compare prediction to actual end pt of ball
-    difference = predicted_point - end_pt_ball_in_base
-    print("Difference: " + str(difference))
+
 
 
     
@@ -241,21 +198,85 @@ def main():
     final_T = np.zeros((4, 4))
     final_T[:3, :3] = M_endeff_in_base[:3, :3]
     final_T[:3, 3:] = predicted_point
+    print(M_endeff_in_base - final_T)
+    
     #our initial guess of what the UR3 joint angles should be to get to finalT
-    initialGuess = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    thetas = np.array([0.0, 0.0, 0.0])
+
+    #get a rough initial guess for theta of joint 2
+    predicted_y = predicted_point[1]
+    predicted_z = predicted_point[2]
+
+    position_joint2 = sim.simxGetObjectPosition(clientID, jointHandles[1], base_handle, sim.simx_opmode_blocking)[1]
+    print(position_joint2)
+    joint2_y = position_joint2[1]
+    joint2_z = position_joint2[2]
+
+    #distance from predicted point to joint2 in yz plane
+    d1 = np.sqrt((joint2_y - predicted_y)**2 + (joint2_z - predicted_z)**2)
+    z_length = predicted_z - joint2_z
+    y_length = predicted_y - joint2_y
+
+    #our thetas to be calculated
+    theta2_guess = 0.0
+    theta3_guess = 0.0
+    theta4_guess = 0.0
+    
+    #define relevant link lengths
+    L1 = 0.244
+    L2 = 0.213
+    L3 = 0.083
+
+    #if it's in this range, it doesn't make sense to move others
+    if d1 < (L1 - L2):
+        theta2_guess = np.arctan2(y_length, z_length)
+        theta3_guess = 0.0
+        theta4_guess = 0.0
+    elif d1 <= (L1 + L2 - L3):
+        top2 = L2**2 - L1**2 - d1**2
+        bot2 = -2*L1*d1
+        theta2_guess = np.arctan2(y_length, z_length) - np.arccos(top2/bot2)
+
+        top3 = d1**2 - L1**2 - L2**2
+        bot3 = -2*L1*L2
+        theta3_guess = np.pi - np.arccos(top3/bot3)
+
+        #fold in on self
+        theta4_guess = np.pi/2
+
+    else:
+        d2 = d1 - L1
+        theta2_guess = np.arctan2(y_length, z_length)
+
+        top3_2 = L3**2 - L2**2 - d2**2
+        bot3_2 = -2*d2*L2
+        print("top3_2/bot3_2: " + str(top3_2/bot3_2))
+        theta3_guess = np.arccos(top3_2/bot3_2)
+
+        top4 = d2**2 - L2**2 - L3**2
+        bot4 = -2*L2*L3
+        print("top4/bot4: " + str(top4/bot4))
+        theta4_guess = np.arccos(top4/bot4) - np.pi
+
+
+    thetas[0] = theta2_guess
+    thetas[1] = theta3_guess
+    thetas[2] = theta4_guess
+    print("thetas: " + str(thetas))
+    
+    for i in range(1, 4):
+       sim.simxSetJointTargetPosition(clientID, jointHandles[i], thetas[i - 1], sim.simx_opmode_oneshot_wait)
+
+    
     #use inverse kinematics to find joint angles that will get us to finalT
-    (thetas1, success) = mr.IKinSpace(S, M_endeff_in_base, final_T, initialGuess, 0.8, 0.015) #still tweaking these values
-    print('thetas1: ' + str(thetas1))
+    #(thetas1, success) = mr.IKinSpace(S, M_endeff_in_base, final_T, initialGuess, 0.001, 0.001) #still tweaking these values
+    #print('thetas1: ' + str(thetas1))
     #set UR3 joints to angles to block ball!
-    for i in range(6):
-        sim.simxSetJointTargetPosition(clientID, jointHandles[i], thetas1[i], sim.simx_opmode_oneshot_wait)
 
-    time.sleep(1)
 
-         
+    motion_thread.join()   
 
     print("Actual End Effector Position " + str(sim.simxGetObjectPosition(clientID, end_effector_handle, base_handle, sim.simx_opmode_blocking)[1]))
-
     sim.simxStopSimulation(clientID, sim.simx_opmode_oneshot)
     sim.simxFinish(clientID)
     return 1
