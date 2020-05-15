@@ -1,36 +1,9 @@
 import sim
 import sys
 import numpy as np
-import modern_robotics as mr
 import utils
 import threading
-import time 
 import simConst as sc
-
-global PI
-PI = np.pi
-#just a 4x4 identity matrix
-global identity 
-identity = np.eye(4)
-#the w's for the joints of the UR3 (all are revolute)
-
-#global q for the positions of each joint
-global q
-q = np.zeros((6,3))
-
-#v's for each joint
-global v
-#v = np.zeros((6,3))
-v = np.zeros((3,3))
-base_handle = 0
-end_effector_handle = 0
-end_effector_wrt_base = [0,0,0]
-
-#get the skew form of a 3x1 column vector
-def skew(x):
-    return np.array([[0, -x[2], x[1]], [x[2], 0, -x[0]], [-x[1], x[0], 0]])
-
-#get forward kinematics of UR3 with an input joint angles
 
 #generate_path gives a random direction towards the goal with velocity 2 m/s
 def generate_path():
@@ -52,9 +25,6 @@ def generate_path():
 
 
 def main():
-    global q
-    global v
-    global base_handle
     sim.simxFinish(-1)
     
     clientID=sim.simxStart('127.0.0.1',19999,True,True,5000,5)
@@ -71,38 +41,7 @@ def main():
     #Get joint handles
     for i in range(0,6):
         jointHandles[i] = sim.simxGetObjectHandle(clientID, 'UR3_joint' + str(i + 1), sim.simx_opmode_blocking) [1]
-
-    #set q values
-    #for i in range(6):
-        #q[i] = np.array(sim.simxGetObjectPosition(clientID, jointHandles[i], base_handle, sim.simx_opmode_blocking) [1])
-
-    #ALT: get q values of joints 2, 3, 4
-    for i in range(1, 4):
-        q[i] = np.array(sim.simxGetObjectPosition(clientID, jointHandles[i], base_handle, sim.simx_opmode_blocking) [1])
-    
-    #set v values
-    #for i in range(6):
-        #v[i] = np.cross(-utils.w[i], q[i])
-
-    #ALT: get v values of joints 2, 3, 4
-    for i in range(1, 4):
-        v[i - 1] = np.cross(-utils.w[i], q[i])
-    
-    #calculate screw axes
-    #S = np.zeros((6,6))
-    S = np.zeros((3,6))
-    for i in range(3):
-        S[i,:3] = utils.w[i+1]
-        S[i,3:] = v[i] 
-
-    S = S.T  #actual screw axes is transpose of this
-
-    global end_effector_handle
-    global identity
-
-    
-
-
+        
     #handle of UR3
     base_handle = sim.simxGetObjectHandle(clientID, "UR3", sim.simx_opmode_blocking)[1]
     
@@ -117,14 +56,6 @@ def main():
 
     #handle for ball sensor/proximity sensor
     sensorHandle = sim.simxGetObjectHandle(clientID, 'Ball_Sensor', sim.simx_opmode_blocking)[1]
-
-    
-    #home position of UR3 end-effector in coords of UR3 base frame
-    M_endeff_in_base = np.array( \
-        [[-1,   0,      0, end_effector_wrt_base[0]], \
-         [0,    -1,     0, end_effector_wrt_base[1]], \
-         [0,    0,      1, end_effector_wrt_base[2]], \
-         [0,    0,      0,                        1]])
 
     #position and orientation of proximity sensore wrt UR3 base frame
     T_sensor_in_base = np.array( \
@@ -189,16 +120,6 @@ def main():
     print("Predicted Point: " + str(predicted_point))
     print("End Point Ball in Base: " + str(end_pt_ball_in_base))
     #compare prediction to actual end pt of ball
-
-
-
-    
-    #final position and orientation of end-effector based on predicted ball location
-    #orientation doesn't need to change, just the position to block the ball
-    final_T = np.zeros((4, 4))
-    final_T[:3, :3] = M_endeff_in_base[:3, :3]
-    final_T[:3, 3:] = predicted_point
-    print(M_endeff_in_base - final_T)
     
     #our initial guess of what the UR3 joint angles should be to get to finalT
     thetas = np.array([0.0, 0.0, 0.0])
@@ -266,12 +187,6 @@ def main():
     
     for i in range(1, 4):
        sim.simxSetJointTargetPosition(clientID, jointHandles[i], thetas[i - 1], sim.simx_opmode_oneshot_wait)
-
-    
-    #use inverse kinematics to find joint angles that will get us to finalT
-    #(thetas1, success) = mr.IKinSpace(S, M_endeff_in_base, final_T, initialGuess, 0.001, 0.001) #still tweaking these values
-    #print('thetas1: ' + str(thetas1))
-    #set UR3 joints to angles to block ball!
 
 
     motion_thread.join()   
