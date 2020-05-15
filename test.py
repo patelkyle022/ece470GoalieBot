@@ -4,6 +4,7 @@ import numpy as np
 import utils
 import threading
 import simConst as sc
+import move_helper
 
 #generate_path gives a random direction towards the goal with velocity 2 m/s
 def generate_path():
@@ -38,10 +39,9 @@ def main():
     
     
     jointHandles = [-1, -1, -1, -1, -1, -1]
-    #Get joint handles
-    for i in range(0,6):
-        jointHandles[i] = sim.simxGetObjectHandle(clientID, 'UR3_joint' + str(i + 1), sim.simx_opmode_blocking) [1]
-        
+    
+    move_helper.getJointHandles(clientID, jointHandles)
+    
     #handle of UR3
     base_handle = sim.simxGetObjectHandle(clientID, "UR3", sim.simx_opmode_blocking)[1]
     
@@ -184,12 +184,12 @@ def main():
     thetas[1] = theta3_guess
     thetas[2] = theta4_guess
     print("thetas: " + str(thetas))
-    
+   
     for i in range(1, 4):
        sim.simxSetJointTargetPosition(clientID, jointHandles[i], thetas[i - 1], sim.simx_opmode_oneshot_wait)
 
 
-    motion_thread.join()   
+    motion_thread.join() #stop motion thread after robot has moved to defending position 
 
     print("Actual End Effector Position " + str(sim.simxGetObjectPosition(clientID, end_effector_handle, base_handle, sim.simx_opmode_blocking)[1]))
     sim.simxStopSimulation(clientID, sim.simx_opmode_oneshot)
